@@ -1,0 +1,88 @@
+[
+  {
+    "dep": "CKG",
+    "arr": "YTY",
+    "date": "2026-09-01",
+    "success": true,
+    "error": "",
+    "flights": [
+      {
+        "flight_no": "",
+        "airline": "春秋航空",
+        "departure_time": "17:55",
+        "arrival_time": "20:10",
+        "departure_airport": "江北国际机场T3",
+        "arrival_airport": "扬州泰州机场",
+        "price": 390,
+        "cabin": "",
+        "duration": ""
+      },
+      {
+        "flight_no": "",
+        "airline": "春秋航空",
+        "departure_time": "10:50",
+        "arrival_time": "13:05",
+        "departure_airport": "江北国际机场T3",
+        "arrival_airport": "扬州泰州机场",
+        "price": 470,
+        "cabin": "",
+        "duration": ""
+      },
+      {
+        "flight_no": "",
+        "airline": "华夏航空",
+        "departure_time": "07:15",
+        "arrival_time": "09:20",
+        "departure_airport": "江北国际机场T3",
+        "arrival_airport": "扬州泰州机场",
+        "price": 510,
+        "cabin": "",
+        "duration": ""
+      },
+      {
+        "flight_no": "",
+        "airline": "四川航空",
+        "departure_time": "07:15",
+        "arrival_time": "09:20",
+        "departure_airport": "江北国际机场T3",
+        "arrival_airport": "扬州泰州机场",
+        "price": 510,
+        "cabin": "",
+        "duration": ""
+      },
+      {
+        "flight_no": "",
+        "airline": "厦门航空",
+        "departure_time": "07:15",
+        "arrival_time": "09:20",
+        "departure_airport": "江北国际机场T3",
+        "arrival_airport": "扬州泰州机场",
+        "price": 520,
+        "cabin": "",
+        "duration": ""
+      },
+      {
+        "flight_no": "",
+        "airline": "南方航空",
+        "departure_time": "07:15",
+        "arrival_time": "09:20",
+        "departure_airport": "江北国际机场T3",
+        "arrival_airport": "扬州泰州机场",
+        "price": 520,
+        "cabin": "",
+        "duration": ""
+      },
+      {
+        "flight_no": "G5640",
+        "airline": "华夏航空 \n华夏航 G54635华夏航 G54466",
+        "departure_time": "08:55",
+        "arrival_time": "22:00",
+        "departure_airport": "江北国际机场T3",
+        "arrival_airport": "扬州泰州机场",
+        "price": 380,
+        "cabin": "",
+        "duration": ""
+      }
+    ]
+  }
+]

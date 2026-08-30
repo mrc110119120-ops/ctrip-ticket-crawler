@@ -1,0 +1,30 @@
+POST /international/search/api/search/batchSearch?v=0.4345324013831522 HTTP/2
+Host: flights.ctrip.com
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:154.0) Gecko/20100101 Firefox/154.0
+Accept: application/json
+Accept-Language: zh-CN,zh;q=0.9,zh-TW;q=0.8,zh-HK;q=0.7,en-US;q=0.6,en;q=0.5
+Accept-Encoding: gzip, deflate, br, zstd
+Referer: https://flights.ctrip.com/online/list/oneway-ckg-yty?_=1&depdate=2026-09-01&cabin=y_s&adult=1
+cookieOrigin: https://flights.ctrip.com
+Content-Type: application/json;charset=utf-8
+x-ctx-fvpc: U2FsdGVkX19/dyfLRU3qRg4PkCgKsI9/rhOdO9T+jcB9XOVUFxKD15O8H/B9Y0QE3B5IqWSlQZE/xrEQcXDUQWEYFza2oBviFlE5hSWBXPBatFBDhBaKPGdZ5A27gAnJUENQL8B5A5/GemlyCycuxSz1SW5PMd8ogyBf7ahg4jnGwKajUYo8FnL4OPEeZwodW7rp/YL/84rR0npu5evG9w==
+transactionID: 095d270548e24ac8bde27cb591808d37
+scope: d
+x-ctx-ubt-pageid: 10320673302
+x-ctx-ubt-pvid: 16
+x-ctx-ubt-sid: 1
+Sessionid: 1
+x-ctx-ubt-vid: 1787992484819.de5b8sAwWgRM
+sign: b6dc88453241608f4e7c44833a2c47dd
+Cache-Control: no-cache
+token: 1001-common-SnGe35Y7FYsTEAgykUvlXJphRG4wpGvmkEoSjtov61jstvZ5w6XvUOyGsJqmybkJT6ipnv1dvLcIabjcmRQbi3Uv7DwTOjTDyU6EGojdmwG3JHPI0kKSYQlJ0ZwNcJpZRm0ytfjntjHtWbpE5piU5vncWQ3jH1YdzRDPJMEnseLPe1Y0arpdx1gYMgEf4YNTRBYX8EohIkGE9HR1OyQdjD3ySMv4TvbDYS1EoPjcME87jScR0mv7kI41ym1j47JgkJqdjB0yM1YPbK4cvXTx4MEG5r49Wcj1tJ7YXzxcmwstE3bRt9EF4JfHRQ6vShjtQEBXE9keOaEUQYk0RGqv9de6MEBcvgNv5MYqceg3EfSYH7ydOWF7e8fjOHvloWc5yhmj6UE9hJAdwAkj50EZ9wOqWsfy3bxabWzYgaimtwD0w39YP0iBfYT3w3AvqsyH7YQOwUbrBDiPnxmYUgED4W7SRtnYF8EPqyc8WmgwnY7EFTrG8rQLvO7eShYaUiF1Y57Kkzr58KgYF9KBNj8cR1ce68Ea6jGSW8fJXnYL7xZY64YHFyc5i1FrcAKkoeNdEqpWhciPLj8Tw4Y95iHlyt9wblRDbypoWGqyXDeqNRH5WDFw4qyfZyPgI4aWHYbmrSwAyBXR7TyMbWLMybZeLaRbXWa7Rm4vAmKXw1h
+Rms-Token: fp=08679A-98FEB3-83891D&vid=1787992484819.de5b8sAwWgRM&pageId=10320673302&r=faabc331f4f2427bb20da85f9181cb2f&ip=2409:8a60:2a23:63e0:b9b7:3654:3b0a:2fc9&rg=fin&kpData=0_0_0&kpControl=0_0_0-0_0_0&kpEmp=0_0_0_0_0_0_0_0_0_0-0_0_0_0_0_0_0_0_0_0-0_0_0_0_0_0_0_0_0_0&screen=1707x1067&tz=+8&blang=zh-CN&oslang=zh-CN&ua=Mozilla%2F5.0%20(Windows%20NT%2010.0%3B%20Win64%3B%20x64%3B%20rv%3A154.0)%20Gecko%2F20100101%20Firefox%2F154.0&d=flights.ctrip.com&v=25&kpg=0_0_0_0_0_0_0_0_0_0&adblock=F&cck=F&ftoken=
+w-payload-source: 1.0.9@102!OEdnNaNWK/Ab9XNHKl45Gldl9lbnKrTLG6tZKrVn9rtR9E4RGS4ZKr4bOrK2+ET5+rApbbbpOSkRKEtS+rbRKlGZbEkbKtb5+rbSKrbn+EKpOrGIOrK/+Et/OtbpOSkZ+rVnOEkL+EAIQPNaO64RTLCZF2hmrtb=
+Content-Length: 1031
+Origin: https://flights.ctrip.com
+Connection: keep-alive
+Cookie: UBT_VID=1787992484819.de5b8sAwWgRM; _bfa=1.1787992484819.de5b8sAwWgRM.1.1787995761948.1787995953673.1.16.10320673302; GUID=09031028315695358455; _ga_9BZF483VNQ=GS2.1.s1787992485$o1$g1$t1787993411$j59$l0$h0; _ga=GA1.1.1492546777.1787992485; _ga_5DVRDQD429=GS2.1.s1787992485$o1$g1$t1787993411$j59$l0$h220749065; _ga_B77BES1Z8Z=GS2.1.s1787992485$o1$g1$t1787993411$j59$l0$h0; Session=SmartLinkCode=chatgpt&SmartLinkKeyWord=&SmartLinkQuary=_UTF.&SmartLinkHost=chatgpt.com&SmartLinkLanguage=zh; MKT_CKID=1787992485531.i9iu4.jd2v; _jzqco=%7C%7C%7C%7C1787992485753%7C1.569816012.1787992485535.1787992485535.1787993411436.1787992485535.1787993411436.0.0.0.2.2; _RGUID=faabc331-f4f2-427b-b20d-a85f9181cb2f; Hm_lvt_a8d6737197d542432f4ff4abc6e06384=1787992486; Hm_lpvt_a8d6737197d542432f4ff4abc6e06384=1787993412; HMACCOUNT=2C6D4A78AF04EB2B; MKT_Pagesource=PC; nfes_isSupportWebP=1; _gid=GA1.2.701096265.1787992495; _ubtstatus=%7B%22vid%22%3A%221787992484819.de5b8sAwWgRM%22%2C%22sid%22%3A1%2C%22pvid%22%3A3%2C%22pid%22%3A600001375%7D; _bfaStatusPVSend=1; _bfaStatus=success; _bfi=p1%3D600001375%26p2%3D0%26v1%3D3%26v2%3D0; FVP=qHepPc96Ngg0cMGAV9KUGCdJsbWMBrvhrXrPYT0%2BlBe7KGcuEBI6OWI3X6stSa1bccSXj09lg%2BxO7P3JJXLwf10w2uRza0VSEjOxm8N40L%2Bck%2FTMvNKOICJLHYictKEtZxcRvZlbkOv28yFU%2B2mojdg%2Byy8O1egOfQeU0rPIN2SEljhC2gxseVlmnDc4IYRg; Union=AllianceID=4902&SID=130727&OUID=&createtime=1787993411&Expires=1788598211387; FlightIntl=Search=[%22CKG|%E9%87%8D%E5%BA%86(CKG)|4|CKG|480%22%2C%22YTY|%E6%89%AC%E5%B7%9E(YTY)|15|YTY|480%22%2C%222026-09-01%22]; _RF1=183.228.190.102; _RSG=x9ayq7pmhgFliSWH.5gD8B; _RDG=2895eb76e40037285e227148e888660508
+Sec-Fetch-Dest: empty
+Sec-Fetch-Mode: cors
+Sec-Fetch-Site: same-origin
+Priority: u=0
