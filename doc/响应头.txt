@@ -1,0 +1,15 @@
+HTTP/2 200
+date: Sun, 30 Aug 2026 08:06:02 GMT
+content-type: application/json;charset=UTF-8
+x-cat-server: cat.ctripcorp.com:80
+x-cat-root-id: 100008370-0a14cb72-496688-97006
+x-cat-root-url: http://cat.ctripcorp.com:80/cat/r/m/100008370-0a14cb72-496688-97006
+flightsignature:
+content-encoding: gzip
+strict-transport-security: max-age=120
+x-via: 1.1 PS-HIA-01diW252:16 (Cdn Cache Server V2.0), 1.1 PS-000-01sl8243:25 (Cdn Cache Server V2.0)
+x-ws-request-id: 6a93e469_PS-000-01sl8243_42890-54665
+x-cdn-cache: MISS
+c-via: wangsu
+unique-request-id: 6a93e469_PS-000-01sl8243_42890-54665
+X-Firefox-Spdy: h2

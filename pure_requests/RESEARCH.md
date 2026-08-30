@@ -14,7 +14,7 @@ POST https://flights.ctrip.com/international/search/api/search/batchSearch?v=<ra
 
 ### 2.1 数据采集
 
-1. 在浏览器中打开 `https://flights.ctrip.com/online/list/oneway-ckg-yty?_=1&depdate=2026-09-01&cabin=y_s&adult=1`
+1. 在浏览器中打开 `https://flights.ctrip.com/online/list/oneway-ckg-yty?depdate=2026-09-01`
 2. 通过 Playwright 路由拦截（`page.route('**/batchSearch**')`）在浏览器级别实时捕获真实请求
 3. 同时通过 `performance.getEntriesByType('resource')` 确认所有 API 调用
 
@@ -91,7 +91,7 @@ cache-control: no-cache
 content-type: application/json;charset=utf-8
 cookie: <多个cookie值>
 origin: https://flights.ctrip.com
-referer: https://flights.ctrip.com/online/list/oneway-ckg-yty?_=1&depdate=2026-09-01&cabin=y_s&adult=1
+referer: https://flights.ctrip.com/online/list/oneway-ckg-yty?depdate=2026-09-01
 scope: d
 sec-ch-ua: "Not=A?Brand";v="99", "Google Chrome";v="151", "Chromium";v="151"
 sec-ch-ua-mobile: ?0

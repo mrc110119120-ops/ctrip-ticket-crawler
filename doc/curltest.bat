@@ -8,7 +8,7 @@ C:\Windows\System32\curl.exe "https://flights.ctrip.com/international/search/api
   -H "Accept: application/json" ^
   -H "Accept-Language: zh-CN,zh;q=0.9,zh-TW;q=0.8,zh-HK;q=0.7,en-US;q=0.6,en;q=0.5" ^
   -H "Accept-Encoding: gzip, deflate, br, zstd" ^
-  -H "Referer: https://flights.ctrip.com/online/list/oneway-ckg-yty?_=1&depdate=2026-09-01&cabin=y_s&adult=1" ^
+  -H "Referer: https://flights.ctrip.com/online/list/oneway-ckg-yty?depdate=2026-09-01" ^
   -H "cookieOrigin: https://flights.ctrip.com" ^
   -H "Content-Type: application/json;charset=utf-8" ^
   -H "x-ctx-fvpc: " ^

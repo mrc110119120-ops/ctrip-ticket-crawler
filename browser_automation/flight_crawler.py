@@ -1,96 +1,186 @@
 """
 flight_crawler.py - 纯浏览器自动化爬取携程机票价格（方案 B）
 
-每个查询都使用 Playwright 打开浏览器，等待页面加载完成，
-从 DOM 或网络响应中提取机票价格信息。
+每个查询都使用 Playwright 打开浏览器（事件等待），拦截 batchSearch 响应体，
+直接从响应 JSON 中解析航班与价格信息（不依赖 DOM 渲染）。
 
-优点：最稳定，完全模拟真实用户，不受 token/w-payload-source 限制
-缺点：速度较慢，每个查询都需要加载页面
+优点：最稳定，完全模拟真实用户，不受 token/w-payload-source 限制；
+     响应体比 DOM 更完整（含舱位代码、行李、共享航班、中转等字段）。
 """
 
 import json
 import logging
 import random
-import re
 import time
 from dataclasses import dataclass, field
-from typing import Optional
 
-from playwright.sync_api import sync_playwright, Page, Route
+from playwright.sync_api import sync_playwright
 
 logger = logging.getLogger(__name__)
-
-# 航班数据提取 JS（在浏览器 DOM 中一次性提取，比 query_selector_all 更可靠）
-EXTRACT_FLIGHTS_JS = """
-() => {
-    const flights = [];
-    const items = document.querySelectorAll('.flight-item.domestic');
-    items.forEach(item => {
-        const flight = {};
-        const airlineEl = item.querySelector('.flight-airline');
-        if (airlineEl) {
-            const text = airlineEl.innerText;
-            const match = text.match(/([A-Z]\\d{4}|[A-Z]{2}\\d{4}|G\\d{5})/);
-            if (match) flight.flightNo = match[1];
-            flight.airline = text.replace(/([A-Z]\\d{4}|[A-Z]{2}\\d{4}|G\\d{5}).*/, '').trim();
-        }
-        const departBox = item.querySelector('.depart-box');
-        if (departBox) {
-            const timeEl = departBox.querySelector('.time');
-            if (timeEl) flight.departureTime = timeEl.innerText.trim();
-            const airportEl = departBox.querySelector('.airport');
-            if (airportEl) flight.departureAirport = airportEl.innerText.trim();
-        }
-        const arrivalBox = item.querySelector('.arrive-box') || item.querySelector('.arrival-box');
-        if (arrivalBox) {
-            const timeEl = arrivalBox.querySelector('.time');
-            if (timeEl) flight.arrivalTime = timeEl.innerText.trim();
-            const airportEl = arrivalBox.querySelector('.airport');
-            if (airportEl) flight.arrivalAirport = airportEl.innerText.trim();
-        }
-        const priceEl = item.querySelector('.price');
-        if (priceEl) {
-            const priceMatch = priceEl.innerText.match(/(\\d+)/);
-            if (priceMatch) flight.price = parseInt(priceMatch[1]);
-        }
-        if (flight.flightNo || flight.price > 0) flights.push(flight);
-    });
-    return flights;
-}
-"""
 
 # 会话建立所需的关键 cookie（由首页 JS 生成，缺少会导致"未找到航班"）
 SESSION_KEY_COOKIES = {"_bfa", "FVP"}
 
 
 @dataclass
+class SegmentInfo:
+    """单个航段信息（中转航班有多个航段）"""
+    flight_no: str = ""                # 市场航班号
+    is_shared: bool = False            # 是否共享航班（存在执飞航班号且异于市场航班号即为 True）
+    operate_flight_no: str = ""        # 执飞航班号（共享航班时与 flight_no 不同）
+    operate_airline_name: str = ""  # 执飞航司名称（如 "四川航空"）
+    operate_airline_code: str = ""     # 执飞航司二字码（如 "3U"）
+    airline_code: str = ""             # 市场航司二字码（如 "EU"）
+    airline_name: str = ""             # 市场航司名称（如 "成都航空"）
+    departure_city_code: str = ""      # 出发城市 IATA 代码（如 "CKG"）
+    departure_city_name: str = ""      # 出发城市名称（如 "重庆"）
+    departure_airport_code: str = ""   # 出发机场 IATA 代码（如 "CKG"）
+    departure_airport_name: str = ""   # 出发机场名称（如 "江北国际机场"）
+    departure_terminal: str = ""       # 出发航站楼（如 "T3"，可为空）
+    departure_time: str = ""           # 出发日期时间 "YYYY-MM-DD HH:MM:SS"
+    arrival_city_code: str = ""        # 到达城市 IATA 代码（如 "YTY"）
+    arrival_city_name: str = ""        # 到达城市名称（如 "扬州"）
+    arrival_airport_code: str = ""     # 到达机场 IATA 代码（如 "YTY"）
+    arrival_airport_name: str = ""     # 到达机场名称（如 "扬州泰州机场"）
+    arrival_terminal: str = ""         # 到达航站楼（可为空）
+    arrival_time: str = ""             # 到达日期时间 "YYYY-MM-DD HH:MM:SS"
+    duration: int = 0                  # 该段飞行时长（分钟）
+    # aircraft_name: str = ""            # 机型名称（如 "空客320(中)"）
+
+    @classmethod
+    def from_flight(cls, f: dict) -> "SegmentInfo":
+        flight_no = f.get("flightNo", "")
+        operate_flight_no = f.get("operateFlightNo", "")
+        return cls(
+            flight_no=flight_no,
+            is_shared=bool(operate_flight_no) and operate_flight_no != flight_no,
+            operate_flight_no=operate_flight_no,
+            operate_airline_code=f.get("operateAirlineCode", ""),
+            operate_airline_name=f.get("operateAirlineName", ""),
+            airline_code=f.get("marketAirlineCode", ""),
+            airline_name=f.get("marketAirlineName", ""),
+            departure_city_code=f.get("departureCityCode", ""),
+            departure_city_name=f.get("departureCityName", ""),
+            departure_airport_code=f.get("departureAirportCode", ""),
+            departure_airport_name=f.get("departureAirportName", ""),
+            departure_terminal=f.get("departureTerminal", ""),
+            departure_time=f.get("departureDateTime", ""),
+            arrival_city_code=f.get("arrivalCityCode", ""),
+            arrival_city_name=f.get("arrivalCityName", ""),
+            arrival_airport_code=f.get("arrivalAirportCode", ""),
+            arrival_airport_name=f.get("arrivalAirportName", ""),
+            arrival_terminal=f.get("arrivalTerminal", ""),
+            arrival_time=f.get("arrivalDateTime", ""),
+            duration=f.get("duration", 0),
+            # aircraft_name=f.get("aircraftName", ""),
+        )
+
+
+@dataclass
 class FlightInfo:
-    """航班信息数据类"""
-    flight_no: str = ""
-    airline: str = ""
-    departure_time: str = ""
-    arrival_time: str = ""
-    departure_airport: str = ""
-    arrival_airport: str = ""
-    price: int = 0
-    cabin: str = ""
-    duration: str = ""
+    """单个行程（航班方案）信息，价格取该行程 priceList 中最低的一档
+    （依次比较 成人价 → 儿童价 → 婴儿价，全部并列时取先出现的）"""
+    itinerary_id: str = ""             # 行程唯一标识（各航段航班号用 "-" 拼接，如 "CZ2317-CZ3437"）
+    departure_time: str = ""           # 出发日期时间（第一段的 departureDateTime，"YYYY-MM-DD HH:MM:SS"）
+    arrival_time: str = ""             # 到达日期时间（最后一段的 arrivalDateTime，中转跨天时为次日）
+    transfer_count: int = 0            # 中转次数（0=直飞，1=中转一次）
+    cross_days: int = 0                # 跨天数（0=当天到达，1=次日到达）
+    duration_total: int = 0            # 总飞行时长（分钟，行程级，含中转等待）
+    segments: list = field(default_factory=list)           # SegmentInfo 列表（所有航班信息都在各航段中）
+
+    # ---- 最低价格那一档的价格信息（依次比较 成人价 → 儿童价 → 婴儿价） ----
+    adult_price: float = 0             # 成人票价（元）
+    child_price: float = 0             # 儿童票价（元）
+    infant_price: float = 0            # 婴儿票价（元，部分选项无婴儿价，为 0）
+    cabin: str = ""                    # 舱位等级（"Y" 经济 / "C" 公务 / "F" 头等）
+    seat_class: str = ""               # 舱位代码（如 "K"、"V"、"X1"；中转时为拼接码如 "@Y-Y/T"）
+    baggage_tag: str = ""              # 托运行李标签（如 "托运行李额20KG"、"无免费托运行李额"）
+    free_airport_fee: bool = False     # 是否免机建费（priceTags 中 tag 含"免机建"）
+    free_fuel_fee: bool = False        # 是否免燃油（响应体 freeOilFeeAndTax 字段）
+    discount_rate: float = 0           # 折扣率（0.37 = 3.7 折；0 表示无标准折扣）
+    ticket_count: int = 0              # 剩余票数（0 表示响应中未提供）
+    # penalty_tag: str = ""              # 退改签简述标签（如 "退改¥216起"）
+
+    def to_dict(self) -> dict:
+        d = self.__dict__.copy()
+        d["segments"] = [s.__dict__ for s in self.segments]
+        return d
 
 
 @dataclass
 class SearchResult:
     """搜索结果数据类"""
-    dep: str = ""
-    arr: str = ""
-    date: str = ""
-    flights: list = field(default_factory=list)
-    raw_response: dict = field(default_factory=dict)
-    success: bool = False
-    error: str = ""
+    dep: str = ""                                   # 查询的出发城市 IATA 代码
+    arr: str = ""                                   # 查询的到达城市 IATA 代码
+    date: str = ""                                  # 查询的出发日期 "YYYY-MM-DD"
+    success: bool = False                           # 查询是否成功（有航班结果且 API 状态正常）
+    error: str = ""                                 # 错误信息（成功时为空字符串）
+    flights: list = field(default_factory=list)     # FlightInfo 列表（已按条件筛选，如只留直飞）
+    raw_response: dict = field(default_factory=dict)  # batchSearch 原始响应体（未处理的完整 JSON）
+
+
+def _parse_itinerary(itinerary: dict) -> FlightInfo:
+    """将一个行程（flightItineraryList 元素）解析为 FlightInfo"""
+    info = FlightInfo()
+
+    # ---- 航段信息（所有航班信息都在各航段中） ----
+    segments_raw = itinerary.get("flightSegments", [])
+    seg = segments_raw[0] if segments_raw else {}
+    info.transfer_count = seg.get("transferCount", 0)
+    info.cross_days = seg.get("crossDays", 0)
+    info.duration_total = seg.get("duration", 0)
+
+    flight_list = seg.get("flightList", [])
+    info.segments = [SegmentInfo.from_flight(f) for f in flight_list]
+    # 行程唯一标识：各航段航班号用 "-" 拼接
+    info.itinerary_id = "-".join(s.flight_no for s in info.segments)
+    # 出发/到达时间：第一段出发时间、最后一段到达时间（中转跨天时为次日）
+    if info.segments:
+        info.departure_time = info.segments[0].departure_time
+        info.arrival_time = info.segments[-1].arrival_time
+
+    # ---- 价格：取最低档（依次比较 成人价 → 儿童价 → 婴儿价，全部并列时取先出现的） ----
+    # 注意：infantPrice 缺失按 +∞ 处理（排在有值之后），确保并列时优先选有婴儿价信息的档位
+    price_list = itinerary.get("priceList", [])
+    if price_list:
+        best = min(
+            price_list,
+            key=lambda p: (
+                p.get("adultPrice", 0),
+                p.get("childPrice", 0),
+                p.get("infantPrice", float("inf")),
+            ),
+        )
+        info.adult_price = best.get("adultPrice", 0)
+        info.child_price = best.get("childPrice", 0)
+        info.infant_price = best.get("infantPrice", 0)
+        info.cabin = best.get("cabin", "")
+        info.free_fuel_fee = bool(best.get("freeOilFeeAndTax", False))
+
+        # 舱位代码 / 折扣率：取第一个 priceUnit 的第一个座位
+        seat_list = (
+            best.get("priceUnitList", [{}])[0]
+            .get("flightSeatList", [{}])
+        )
+        if seat_list:
+            info.seat_class = seat_list[0].get("seatClass", "")
+            info.discount_rate = seat_list[0].get("discountRate", 0) or 0
+
+        info.baggage_tag = best.get("baggage", {}).get("baggageTag", "")
+        # info.penalty_tag = best.get("penalty", {}).get("defaultPenaltyTag", "")
+        info.ticket_count = best.get("ticketCount", 0) or 0
+
+        # 免机建费：priceTags 中 FreeSurcharge 类型且 tag 含 "免机建"
+        for tag in best.get("priceTags", []):
+            if tag.get("dtype") == "FreeSurcharge":
+                if "免机建" in tag.get("data", {}).get("tag", ""):
+                    info.free_airport_fee = True
+
+    return info
 
 
 class FlightCrawler:
-    """携程机票纯浏览器自动化爬虫"""
+    """携程机票纯浏览器自动化爬虫（响应体解析版）"""
 
     def __init__(self, headless: bool = True, slow_mo: int = 0):
         self.headless = headless
@@ -160,17 +250,17 @@ class FlightCrawler:
         dep: str,
         arr: str,
         date: str,
-        cabin: str = "y_s",
+        include_transfer: bool = False,
         timeout_ms: int = 30000,
     ) -> SearchResult:
         """
-        搜索机票价格
+        搜索机票价格（从 batchSearch 响应体解析）
 
         Args:
             dep: 出发城市 IATA 代码（如 "CKG"）
             arr: 到达城市 IATA 代码（如 "YTY"）
             date: 出发日期（格式：YYYY-MM-DD）
-            cabin: 舱位类型（y_s=经济/超经, y_s_c_f=不限, c_f=公务/头等）
+            include_transfer: 是否保留中转航班（False=只保留直飞）
             timeout_ms: 超时时间（毫秒）
 
         Returns:
@@ -185,7 +275,7 @@ class FlightCrawler:
             # 构建搜索 URL
             url = (
                 f"https://flights.ctrip.com/online/list/oneway-{dep.lower()}-{arr.lower()}"
-                f"?_=1&depdate={date}&cabin={cabin}&adult=1"
+                f"?depdate={date}"
             )
 
             # 等待 batchSearch 响应到达（事件等待，响应一到立即继续）
@@ -197,31 +287,25 @@ class FlightCrawler:
             response = resp_info.value
             logger.info("batchSearch responded (HTTP %s)", response.status)
 
-            # 响应到达 ≠ DOM 渲染完成：短等待 + 重试，直到 DOM 出现航班数据
-            flights_data = []
-            for wait_ms in (300, 500, 800, 1000, 1500, 2000):
-                self.page.wait_for_timeout(wait_ms)
-                flights_data = self.page.evaluate(EXTRACT_FLIGHTS_JS)
-                if flights_data:
-                    break
+            # 解析响应体
+            body = response.json()
+            result.raw_response = body
 
-            # 转换为我们数据类
-            flights = []
-            for data in flights_data:
-                flight = FlightInfo(
-                    flight_no=data.get("flightNo", ""),
-                    airline=data.get("airline", ""),
-                    departure_time=data.get("departureTime", ""),
-                    arrival_time=data.get("arrivalTime", ""),
-                    departure_airport=data.get("departureAirport", ""),
-                    arrival_airport=data.get("arrivalAirport", ""),
-                    price=data.get("price", 0),
-                )
-                flights.append(flight)
+            # 响应成功判断
+            if body.get("status") != 0 or body.get("msg") != "success":
+                result.error = f"API error: status={body.get('status')}, msg={body.get('msg')}"
+                logger.error(result.error)
+                return result
+
+            itineraries = body.get("data", {}).get("flightItineraryList", [])
+            flights = [_parse_itinerary(it) for it in itineraries]
+
+            # 中转筛选：默认只保留直飞
+            if not include_transfer:
+                flights = [f for f in flights if f.transfer_count == 0]
 
             result.flights = flights
             result.success = len(flights) > 0
-
             if not result.success:
                 result.error = "No flights found"
 
@@ -233,103 +317,18 @@ class FlightCrawler:
 
         return result
 
-    def _extract_flights_from_dom(self) -> list:
-        """从页面 DOM 提取航班信息"""
-        flights = []
-
-        # 携程实际结构: .flight-list > .flight-item.domestic > .flight-box > .flight-row
-        # 使用 evaluate 来获取数量（更可靠）
-        count = self.page.evaluate("document.querySelectorAll('.flight-item.domestic').length")
-        logger.info("Found %d flight-item.domestic elements", count)
-
-        if count == 0:
-            # 回退：尝试其他选择器
-            count = self.page.evaluate("document.querySelectorAll('.flight-item').length")
-            logger.info("Found %d .flight-item elements", count)
-
-        flight_items = self.page.query_selector_all(".flight-item.domestic")
-
-        for item in flight_items:
-            flight = FlightInfo()
-
-            # 提取航空公司和航班号
-            airline_el = item.query_selector(".flight-airline")
-            if airline_el:
-                full_text = airline_el.inner_text().strip()
-                # 提取航班号（如 9C6250, G56209）
-                match = re.search(r'([A-Z]\d{4}|[A-Z]{2}\d{4}|G\d{5})', full_text)
-                if match:
-                    flight.flight_no = match.group(1)
-                # 提取航空公司
-                airline_name = re.sub(r'([A-Z]\d{4}|[A-Z]{2}\d{4}|G\d{5}).*', '', full_text).strip()
-                flight.airline = airline_name
-
-            # 提取时间 - .depart-box > .time
-            depart_box = item.query_selector(".depart-box")
-            if depart_box:
-                time_el = depart_box.query_selector(".time")
-                if time_el:
-                    flight.departure_time = time_el.inner_text().strip()
-                airport_el = depart_box.query_selector(".airport")
-                if airport_el:
-                    flight.departure_airport = airport_el.inner_text().strip()
-
-            # 提取到达信息 - .arrival-box
-            arrival_box = item.query_selector(".arrival-box")
-            if arrival_box:
-                time_el = arrival_box.query_selector(".time")
-                if time_el:
-                    flight.arrival_time = time_el.inner_text().strip()
-                airport_el = arrival_box.query_selector(".airport")
-                if airport_el:
-                    flight.arrival_airport = airport_el.inner_text().strip()
-
-            # 提取价格 - .flight-price .price
-            price_el = item.query_selector(".flight-price .price, .price")
-            if price_el:
-                price_text = price_el.inner_text().strip()
-                price_match = re.search(r'(\d+)', price_text.replace(',', ''))
-                if price_match:
-                    flight.price = int(price_match.group(1))
-
-            if flight.flight_no or flight.price > 0:
-                flights.append(flight)
-
-        return flights
-
-    def _extract_flights_from_response(self, response: dict) -> list:
-        """从 batchSearch API 响应提取航班信息"""
-        flights = []
-
-        # 根据实际响应结构调整
-        data = response.get("data", response)
-        flight_list = data.get("flightList", data.get("flights", []))
-
-        for item in flight_list:
-            flight = FlightInfo()
-            flight.flight_no = item.get("flightNo", item.get("flightNumber", ""))
-            flight.airline = item.get("airlineName", item.get("airline", ""))
-            flight.departure_time = item.get("departureTime", "")
-            flight.arrival_time = item.get("arrivalTime", "")
-            flight.departure_airport = item.get("departureAirport", "")
-            flight.arrival_airport = item.get("arrivalAirport", "")
-            flight.price = item.get("price", item.get("lowestPrice", 0))
-            flight.cabin = item.get("cabin", "")
-            flight.duration = item.get("duration", "")
-            flights.append(flight)
-
-        return flights
-
     def batch_search(
         self,
         queries: list[dict],
+        include_transfer: bool = False,
         delay_range: tuple = (2, 5),
     ) -> list:
         """
         批量搜索
 
         Args:
-            queries: 查询列表，每个元素为 dict: {dep, arr, date, cabin}
+            queries: 查询列表，每个元素为 dict: {dep, arr, date}
+            include_transfer: 是否保留中转航班
             delay_range: 查询间随机延迟范围（秒）
 
         Returns:
@@ -345,7 +344,7 @@ class FlightCrawler:
                 dep=q["dep"],
                 arr=q["arr"],
                 date=q["date"],
-                cabin=q.get("cabin", "y_s"),
+                include_transfer=include_transfer,
             )
             results.append(result)
 
@@ -362,11 +361,9 @@ def main():
     """CLI 入口"""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
-    print("=== 携程机票纯浏览器自动化爬取 ===\n")
+    print("=== 携程机票纯浏览器自动化爬取（响应体解析版） ===\n")
 
     queries = [
-        # {"dep": "PEK", "arr": "SHA", "date": "2026-09-01"},  # 北京→上海（热门航线）
-        # {"dep": "SHA", "arr": "PEK", "date": "2026-09-05"},  # 上海→北京
         {"dep": "CKG", "arr": "YTY", "date": "2026-09-01"},  # 重庆→扬州
     ]
 
@@ -382,7 +379,14 @@ def main():
             if r.success:
                 print(f"   找到 {len(r.flights)} 个航班:")
                 for f in r.flights[:3]:  # 只显示前 3 个
-                    print(f"   - {f.flight_no or 'N/A'}: price={f.price} ({f.departure_time}-{f.arrival_time})")
+                    first_seg = f.segments[0]
+                    shared = f" (共享:{first_seg.operate_flight_no})" if first_seg.is_shared else ""
+                    print(
+                        f"   - {first_seg.flight_no}{shared}: 成人¥{f.adult_price} 儿童¥{f.child_price} "
+                        f"{f.cabin}/{f.seat_class} {f.baggage_tag} "
+                        f"[免机建:{f.free_airport_fee} 免燃油:{f.free_fuel_fee}] "
+                        f"({first_seg.departure_time} -> {f.segments[-1].arrival_time})"
+                    )
                 if len(r.flights) > 3:
                     print(f"   ... 还有 {len(r.flights) - 3} 个航班")
             else:
@@ -399,7 +403,7 @@ def main():
                 "date": r.date,
                 "success": r.success,
                 "error": r.error,
-                "flights": [f.__dict__ for f in r.flights],
+                "flights": [f.to_dict() for f in r.flights],
             })
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(save_data, f, ensure_ascii=False, indent=2)

@@ -156,7 +156,7 @@ def build_headers(
         "Accept-Encoding": "gzip, deflate, br, zstd",
         "Referer": (
             f"https://flights.ctrip.com/online/list/oneway-{dep.lower()}-{arr.lower()}"
-            f"?_=1&depdate={dep_date}&cabin=y_s&adult=1"
+            f"?depdate={dep_date}"
         ),
         "Content-Type": "application/json;charset=utf-8",
         "Origin": "https://flights.ctrip.com",

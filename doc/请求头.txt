@@ -1,0 +1,31 @@
+POST /international/search/api/search/batchSearch?v=0.28446129262384245 HTTP/2
+Host: flights.ctrip.com
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:154.0) Gecko/20100101 Firefox/154.0
+Accept: application/json
+Accept-Language: zh-CN,zh;q=0.9,zh-TW;q=0.8,zh-HK;q=0.7,en-US;q=0.6,en;q=0.5
+Accept-Encoding: gzip, deflate, br, zstd
+Referer: https://flights.ctrip.com/online/list/oneway-ckg-yty?_=1&depdate=2026-09-01
+cookieOrigin: https://flights.ctrip.com
+Content-Type: application/json;charset=utf-8
+x-ctx-fvpc:
+transactionID: 27ce45e013d442cfa407b9c2bfbf78e5
+scope: d
+x-ctx-ubt-pageid: 10320673302
+x-ctx-ubt-pvid: 8
+x-ctx-ubt-sid: 4
+Sessionid: 4
+x-ctx-ubt-vid: 1787992484819.de5b8sAwWgRM
+sign: 06855a90e07e9fa24b77a24e0cbba9ba
+Cache-Control: no-cache
+token: 1001-common-a46rfEmLeDkIpDi8UiFcwDUjBayafJ76vBSEo6WlPvZkvs6v5HxqLw6Fi79WGNj13y83EHLi8FEzPiOzJUZWPFiUHj91v71iZ9jnDwOPvqlypUWzGxgY4pR1zyFHysXRz9y3mjTMj3BW8Uy4Ny5DRpNwnLRSkjsHWmaETPvqnIobI3YplyPzIN6WgTYAkrnLYFYacWO0KNBvHFRBhy9oj4qybsvZ3vsBYQgEHQjP5EMZjaMRodvTQIDOymfjq4JkGJfzjhAyd0YFbKbNvNfxZUE96rUSWdPITfiOYgbedBemMRUTylTigkEcmJ0tRD9jfpRzPYZBefTwDpwPLRkAvMUe8kEGbwhmJhHvZQecZvs6w0DE4tR8Geqtj3ZvP1JgzY0Fjsbj1XYO4JHMwPQYSAyXHJ5gwH9i7BwsYpZYTXePgyA8ykaJPmYAhwc3JPHR87YXsw7SrZNEh5RLYqny5Hx8fRO4YkMENTynENMjBYBUwszY5ycQvfDeZHYm9icSYqXJ6BWBQEXYqNvTGIX9RQoeHAEnHjO0WcGWoTKGLxfY4J75wBtrnLr0GKDPeoNE5UWzwZ1xzlJhYTArfMYF3v7TRsMyd3WqHy3FeAoRBOWmDw3gyOTRQpw1NrcYDoJtDxB3xoLRMoyqnWtTyG3eB7RkfWQNRlsvsHRgoJsl
+Rms-Token:
+w-payload-source: 1.0.9@102!h/Tn6PVLzqRbGrad9PtIGPOlGSTnKPOVGPGZKSFP+rFdOSNVOSV/GlTbOrK2+ET5+rApbbbpOSkRKETZKrGp+EkSbEkbKtb5+rbSKrbn+EKpOrGIOrK/+Et/OtbpOSkZ+rVnOEkL+EAIQPNaO64RTLCZF2hmrtb=
+Content-Length: 822
+Origin: https://flights.ctrip.com
+Connection: keep-alive
+Cookie: UBT_VID=1787992484819.de5b8sAwWgRM; _bfa=1.1787992484819.de5b8sAwWgRM.1.1788075893091.1788077161618.4.8.10320673302; GUID=09031028315695358455; _ga_9BZF483VNQ=GS2.1.s1787992485$o1$g1$t1787993411$j59$l0$h0; _ga=GA1.1.1492546777.1787992485; _ga_5DVRDQD429=GS2.1.s1787992485$o1$g1$t1787993411$j59$l0$h220749065; _ga_B77BES1Z8Z=GS2.1.s1787992485$o1$g1$t1787993411$j59$l0$h0; Session=SmartLinkCode=chatgpt&SmartLinkKeyWord=&SmartLinkQuary=_UTF.&SmartLinkHost=chatgpt.com&SmartLinkLanguage=zh; MKT_CKID=1787992485531.i9iu4.jd2v; _jzqco=%7C%7C%7C%7C1787992485753%7C1.569816012.1787992485535.1787993411436.1788060319326.1787993411436.1788060319326.0.0.0.3.3; _RGUID=faabc331-f4f2-427b-b20d-a85f9181cb2f; Hm_lvt_a8d6737197d542432f4ff4abc6e06384=1787992486; Hm_lpvt_a8d6737197d542432f4ff4abc6e06384=1787993412; HMACCOUNT=2C6D4A78AF04EB2B; MKT_Pagesource=PC; nfes_isSupportWebP=1; _gid=GA1.2.701096265.1787992495; _ubtstatus=%7B%22vid%22%3A%221787992484819.de5b8sAwWgRM%22%2C%22sid%22%3A1%2C%22pvid%22%3A3%2C%22pid%22%3A600001375%7D; _bfaStatusPVSend=1; _bfaStatus=success; _bfi=p1%3D600001375%26p2%3D0%26v1%3D3%26v2%3D0; FVP=YZxWudsdDuHukj6FxaLl%2Bw0igyDMhJTW9KQPOFCfFARRm2Pt7knrjgqEBcEX%2BIbNgGH8NrFqT9oQWk80g4NWR1I1RlrwGU%2F%2B4GL0v2Xc7CUgo84G5Nt%2FtBIngyQ%2FpZACKXZ8x%2Fcw%2BYmrviV3m%2FHClLqkGkCCYDqBfBK5zzpGvVHjTzvt%2Bup9SUlOJFbpb8sa; Union=AllianceID=4902&SID=130727&OUID=&createtime=1787993411&Expires=1788598211387; FlightIntl=Search=[%22CKG|%E9%87%8D%E5%BA%86(CKG)|4|CKG|480%22%2C%22YTY|%E6%89%AC%E5%B7%9E(YTY)|15|YTY|480%22%2C%222026-09-01%22]; _RF1=183.228.190.102; _RSG=x9ayq7pmhgFliSWH.5gD8B; _RDG=2895eb76e40037285e227148e888660508
+Sec-Fetch-Dest: empty
+Sec-Fetch-Mode: cors
+Sec-Fetch-Site: same-origin
+Priority: u=4
+TE: trailers

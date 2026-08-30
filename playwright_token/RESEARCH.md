@@ -51,7 +51,7 @@
 
 ### 2.3 测试环境
 
-- **搜索页面**：`https://flights.ctrip.com/online/list/oneway-ckg-yty?_=1&depdate=2026-09-01&cabin=y_s&adult=1`
+- **搜索页面**：`https://flights.ctrip.com/online/list/oneway-ckg-yty?depdate=2026-09-01`
 - **目标 API**：`POST https://flights.ctrip.com/international/search/api/search/batchSearch`
 - **测试查询**：CKG → YTY（3 个不同日期）
 

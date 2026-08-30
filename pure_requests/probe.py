@@ -4,7 +4,7 @@ import requests
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36")
 
-url = "https://flights.ctrip.com/online/list/oneway-ckg-yty?_=1&depdate=2026-09-01&cabin=y_s&adult=1"
+url = "https://flights.ctrip.com/online/list/oneway-ckg-yty?depdate=2026-09-01"
 r = requests.get(url, headers={"User-Agent": UA}, timeout=30)
 
 print("=== 432 WhaleGuard block characterization ===")

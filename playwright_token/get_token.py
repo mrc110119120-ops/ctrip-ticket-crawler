@@ -53,7 +53,7 @@ class TokenData:
 
 
 def capture_token(
-    search_url: str = "https://flights.ctrip.com/online/list/oneway-ckg-yty?_=1&depdate=2026-09-01&cabin=y_s&adult=1",
+    search_url: str = "https://flights.ctrip.com/online/list/oneway-ckg-yty?depdate=2026-09-01",
     headless: bool = True,
     timeout_ms: int = 30000,
 ) -> Optional[TokenData]:

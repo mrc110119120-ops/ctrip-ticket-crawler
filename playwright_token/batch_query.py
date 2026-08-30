@@ -95,7 +95,7 @@ class FlightQueryClient:
         headers = {
             "Referer": (
                 f"https://flights.ctrip.com/online/list/oneway-{dep.lower()}-{arr.lower()}"
-                f"?_=1&depdate={dep_date}&cabin=y_s&adult={adult}"
+                f"?depdate={dep_date}"
             ),
             "sign": sign,
             "transactionID": tx_id,

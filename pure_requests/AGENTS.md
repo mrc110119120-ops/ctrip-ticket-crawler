@@ -82,11 +82,11 @@ python pure_requests/run_check.py
 | doc/ 文件 | 内容 | 对应的脚本引用 |
 |-----------|------|---------------|
 | `doc/curltest.bat` | 浏览器原始 curl 命令 | `ctrip_flight.py` 的 URL 和参数来源 |
-| `doc/请求体` | batchSearch JSON 请求体 | `ctrip_flight.py` → `build_search_body()` 的结构参考 |
-| `doc/请求头` | batchSearch HTTP 请求头 | `ctrip_flight.py` → `build_headers()` 的结构参考 |
-| `doc/响应体` | batchSearch JSON 响应 | 理解 API 返回数据结构 |
-| `doc/响应头` | batchSearch HTTP 响应头 | 理解响应元数据 |
-| `doc/网页源码` | 携程搜索页 HTML 源码 | 包含 `GlobalSearchCriteria` JS 对象，是请求体结构的原始来源 |
+| `../doc/请求体.json` | batchSearch JSON 请求体 | `ctrip_flight.py` → `build_search_body()` 的结构参考 |
+| `../doc/请求头.txt` | batchSearch HTTP 请求头 | `ctrip_flight.py` → `build_headers()` 的结构参考 |
+| `../doc/响应体.json` | batchSearch JSON 响应 | 理解 API 返回数据结构 |
+| `../doc/响应头.txt` | batchSearch HTTP 响应头 | 理解响应元数据 |
+| `../doc/网页源码.html` | 携程搜索页 HTML 源码 | 包含 `GlobalSearchCriteria` JS 对象，是请求体结构的原始来源 |
 
 ## 签名算法（已验证）
 

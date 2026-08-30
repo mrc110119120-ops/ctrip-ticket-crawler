@@ -1,95 +1,106 @@
-# browser_automation 研究报告 — 方案 B：纯浏览器自动化（最终可行方案）
+# browser_automation 研究报告
 
-> ✅ **研究结论：方案 B 是三个方案中唯一验证可行的爬取方案。**
-> 研究日期：2026-08-30，事件等待版已实测（首次查询 ~7.6 秒，后续查询 ~6.1 秒）
+> 结论：当前 `browser_automation/` 是唯一已经验证成功的方案。
+> 研究日期：2026-08-30。
 
 ## 1. 研究目标
 
-在纯 requests（见 `../pure_requests/RESEARCH.md`）和方案 A（Playwright 取 token + requests，见 `../playwright_token/RESEARCH.md`）相继失败后，验证最后一个方案：**每个查询都用 Playwright 驱动真实浏览器完成，从渲染后的 DOM 中提取机票价格**。
+在纯 requests 和 Playwright + requests 两条路线都失败后，验证是否可以通过真实浏览器完成完整查询，并直接从浏览器侧拿到携程航班列表数据。
 
-## 2. 实现原理
+最终答案是可以，而且实现路径比前两条更稳定。
 
-```
-1. 启动 Chromium（headless）
-2. 首次查询前访问首页 https://flights.ctrip.com/，
-   轮询等待关键 cookie（_bfa、FVP）生成（实测 ~1.3 秒就绪）
-3. page.expect_response() 监听 batchSearch 响应，同时导航到搜索页
-   .../oneway-{dep}-{arr}?depdate={date}&cabin=y_s&adult=1
-4. 浏览器内部自动执行 JS 发起 batchSearch（由 WhaleGuard JS 正常签名，无需干预）
-5. 响应到达后，"短等待 + 重试"直到 DOM 渲染出航班数据（响应 ≠ 渲染完成）
-6. page.evaluate() 从 DOM 一次性提取航班号 / 时间 / 机场 / 价格
-7. 会话建立后，后续查询跳过首页步骤，复用同一浏览器 context
-```
+## 2. 为什么前两条方案失败
 
-关键点：**完全放弃在浏览器外复现请求**，让浏览器自己完成一切（包括 token、w-payload-source 的生成），我们只读渲染结果。
+### 2.1 纯 requests
 
-## 3. 研究过程中的关键发现
+`pure_requests/` 方案会被 WhaleGuard 拦截，返回 HTTP 432。
 
-以下发现均已固化进 `flight_crawler.py` 实现：
+根因不是签名本身，而是请求缺少浏览器内生成的会话上下文，包括页面侧动态生成的 cookie 和相关请求上下文。
 
-| # | 发现 | 固化为 |
-|---|------|--------|
-| 1 | 全新浏览器无 cookie 时，携程返回"未找到符合条件的航班"（即使航线有航班）。首页 JS 会生成 `UBT_VID`/`_bfa`/`FVP`/`GUID`/`_RGUID` 等会话 cookie，其中 `_bfa`+`FVP` 出现即可视为会话就绪 | `_ensure_session()` + `SESSION_KEY_COOKIES` 轮询 |
-| 2 | `page.route` + `route.fetch()` + `route.fulfill()` 会重新发起请求，破坏反爬参数绑定，导致返回空数据。**绝不能拦截 batchSearch 本身** | 不使用 route 拦截 |
-| 3 | batchSearch 响应到达 ≠ DOM 渲染完成，立即 evaluate 会取到空数据 | 提取时"短等待+重试"（300ms→500ms→...→2000ms） |
-| 4 | DOM 实际类名：航班容器 `.flight-item.domestic`、航司 `.flight-airline`、出发 `.depart-box`、到达 `.arrive-box`（不是 `arrival`）、价格 `.price` | `EXTRACT_FLIGHTS_JS` |
-| 5 | `page.evaluate(JS)` 一次性提取比 Python 侧 `query_selector_all` 更可靠 | `EXTRACT_FLIGHTS_JS` |
-| 6 | Windows 控制台默认 GBK，打印 emoji/¥ 会 UnicodeEncodeError | 运行时设 `PYTHONIOENCODING=utf-8` |
+### 2.2 Playwright + token + requests
 
-## 4. 性能实测（2026-08-30，`time_benchmark.py`）
+`playwright_token/` 方案虽然能从浏览器里拿到部分动态信息，但 token 和 `w-payload-source` 都带有明显的会话和请求态特征，抽出来后再到浏览器外复用仍然不稳定，最终依然失败。
 
-| 指标 | 数值 |
-|------|------|
-| 首次查询（含浏览器启动 + 会话建立） | **7.57 秒** |
-| 后续查询（会话复用，无首页开销） | **6.09 秒/次** |
-| 会话建立（首页 cookie 轮询） | ~1.3 秒 |
-| 搜索页导航 + batchSearch 响应 | ~4-5 秒 |
-| DOM 渲染 + 提取 | ~1.1 秒 |
+## 3. 当前方案的实现方式
 
-数据质量与完整版一致：PEK→SHA 与 SHA→PEK 各 7 个航班（含航班号、时间、价格）。
+`flight_crawler.py` 的做法不是逆向签名，也不是把浏览器只当成 token 提取器，而是直接让浏览器把整条链路跑完：
 
-### 进一步优化方向（未实施）
+1. 启动 Chromium
+2. 首次访问首页 `https://flights.ctrip.com/`
+3. 等待关键 cookies 出现，当前代码里关注的是 `_bfa` 和 `FVP`
+4. 跳转到航班列表页，例如 `https://flights.ctrip.com/online/list/oneway-ckg-yty?depdate=2026-09-01`
+5. 用 `page.expect_response()` 等待 `batchsearch` 响应
+6. 直接解析响应 JSON，映射成 `FlightInfo`
+7. 默认过滤掉中转航班，只保留直飞
 
-| 优化 | 预期收益 | 说明 |
-|------|---------|------|
-| 并行多个 context | 吞吐 ×N | 一个浏览器开多个 context 并行查询，需控制并发数（建议 ≤3）避免触发风控 |
-| 阻止无关资源加载 | ~1-2 秒/次 | 拦截图片/字体/统计脚本（仍不能拦截 batchSearch） |
+这条链路的关键点是：不在浏览器外重建会话，也不尝试复用浏览器内生成的签名参数。
 
-## 5. 最终结论
+## 4. 从 `flight_crawler.py` 固化下来的观察
 
-### 5.1 三方案对比总表
+### 4.1 会话建立是必须步骤
 
-| 方案 | 结果 | 根因 |
-|------|------|------|
-| 纯 requests（`../pure_requests/`） | ❌ HTTP 432 | 缺 token / w-payload-source，页面本身也被保护 |
-| Playwright 取 token + requests（`../playwright_token/`） | ❌ 432 | token 是会话级、w-payload-source 是请求级，无法在浏览器外复现 |
-| **纯浏览器自动化（本方案）** | ✅ **成功** | 不需要在浏览器外复现任何东西 |
+当前代码把首页访问当成会话建立步骤。没有 `_bfa` 和 `FVP`，后续列表页虽然看起来能打开，但返回结果会不完整，常见表现是“未找到符合条件的航班”。
 
-### 5.2 方案 B 的优缺点
+### 4.2 不要拦截 `batchSearch`
 
-**优点：**
-- 完全模拟真实用户，天然通过 WhaleGuard 校验（JS 自己算签名）
-- 不需要逆向任何混淆 JS
-- 数据来自渲染后的 DOM，可靠性高
-- 事件等待版单次查询仅 ~6-8 秒，会话复用下批量查询效率可接受
+`page.route()` + `route.fetch()` + `route.fulfill()` 这类拦截方式会破坏原始请求上下文，容易让返回数据变空。当前方案选择的是只监听响应，不修改请求。
 
-**缺点：**
-- 相比 HTTP 直连仍慢（每次 ~6 秒）
-- 资源消耗大（需运行 Chromium）
-- 不适合大规模并发（会触发更严格风控）
+### 4.3 响应到达后不能立刻取值
 
-### 5.3 后续建议
+在部分页面上，`batchSearch` 响应到达时，页面 DOM 还没完全渲染。如果后续要从 DOM 取值，需要等待更长时间。
 
-1. **中期**：一个浏览器 + 多 context 并行（并发 ≤3），提升批量吞吐
-2. **长期**（如需大规模爬取）：考虑逆向 WhaleGuard 的 w-payload-source 算法（方案 C），但携程会定期更新混淆，维护成本高
+不过当前实现已经改为直接解析响应 JSON，所以这条风险已经基本消失。
 
-## 6. 相关文件
+## 5. `results.json` 的样本结论
 
-| 文件 | 说明 |
-|------|------|
-| `flight_crawler.py` | 核心爬虫（事件等待版，已实测） |
-| `time_benchmark.py` | 性能基准测试脚本（第 4 节数据来源） |
-| `results.json` | 成功爬取的航班数据（运行时生成） |
-| `AGENTS.md` | 使用说明（程序文档，研究内容见本文件） |
-| `../pure_requests/RESEARCH.md` | 纯 requests 方案研究 |
-| `../playwright_token/RESEARCH.md` | 方案 A 研究及参数动态性分析 |
+当前样本来自一次成功查询：
+
+- 出发：`CKG`
+- 到达：`YTY`
+- 日期：`2026-09-01`
+
+样本里可以确认的内容包括：
+
+- 结果是直飞行程为主，`transfer_count` 为 `0`
+- 存在大量共享航班，`flightNo` 和 `operateFlightNo` 不一致很常见
+- 成人票价分布跨度较大，样本里能看到 `320` 到 `670` 之间的多个档位
+- `free_airport_fee`、`free_fuel_fee`、`discount_rate`、`ticket_count` 等字段都能稳定取到
+- 航站楼、航班号、出发到达时间、机型、行李额、退改签规则都在响应里具备
+
+这说明 `batchSearch` 返回的数据已经足够支撑完整的航班列表展示和价格比较。
+
+## 6. 性能数据
+
+`time_benchmark.py` 的当前观测值大致如下：
+
+| 指标 | 结果 |
+| --- | --- |
+| 首次查询 | 约 7.57 秒 |
+| 后续查询 | 约 6.09 秒 |
+| 会话建立 | 约 1.3 秒 |
+| 列表页导航 + `batchSearch` | 约 4 到 5 秒 |
+| 响应解析 | 相对很快，几乎不是主要开销 |
+
+这意味着当前方案的时间成本主要在浏览器启动、会话建立和列表页等待上，而不在解析逻辑本身。
+
+## 7. 优点和局限
+
+### 优点
+
+- 完全遵循真实浏览器行为
+- 不需要在浏览器外复现 WhaleGuard 的签名逻辑
+- 数据来自响应 JSON，结构比 DOM 更完整
+- 成功率和稳定性明显优于前两条路线
+
+### 局限
+
+- 启动 Chromium 有固定开销
+- 每次查询仍然偏慢，不适合高并发
+- 对页面和响应结构变化仍然敏感
+- 批量查询目前是顺序执行，不是真正并行
+
+## 8. 后续方向
+
+1. 如果继续做吞吐优化，可以尝试复用一个浏览器下的多个 context，但要控制并发上限。
+2. 如果要扩展到更多航线，建议继续用 `results.json` 作为样本对照，逐步确认字段稳定性。
+

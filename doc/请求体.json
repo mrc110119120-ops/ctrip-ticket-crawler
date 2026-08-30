@@ -1,0 +1,42 @@
+{
+  "adultCount": 1,
+  "childCount": 0,
+  "infantCount": 0,
+  "flightWay": "S",
+  "cabin": "Y_S",
+  "scope": "d",
+  "segmentNo": 1,
+  "transactionID": "27ce45e013d442cfa407b9c2bfbf78e5",
+  "flightSegments": [
+    {
+      "departureCityCode": "CKG",
+      "arrivalCityCode": "YTY",
+      "departureCityName": "重庆",
+      "arrivalCityName": "扬州",
+      "departureDate": "2026-09-01",
+      "departureCountryId": 1,
+      "departureCountryName": "中国",
+      "departureCountryCode": "CN",
+      "departureProvinceId": 4,
+      "departureCityId": 4,
+      "arrivalCountryId": 1,
+      "arrivalCountryName": "中国",
+      "arrivalCountryCode": "CN",
+      "arrivalProvinceId": 15,
+      "arrivalCityId": 15,
+      "departureCityTimeZone": 480,
+      "arrivalCityTimeZone": 480,
+      "timeZone": 480
+    }
+  ],
+  "directFlight": false,
+  "extGlobalSwitches": {
+    "useAllRecommendSwitch": true,
+    "unfoldPriceListSwitch": true
+  },
+  "noRecommend": false,
+  "extensionAttributes": {
+    "LoggingSampling": false,
+    "isFlightIntlNewUser": false
+  }
+}
