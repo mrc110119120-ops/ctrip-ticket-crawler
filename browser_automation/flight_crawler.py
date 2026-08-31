@@ -11,6 +11,7 @@ flight_crawler.py - 纯浏览器自动化爬取携程机票价格（方案 B）
 import json
 import logging
 import random
+import re
 import time
 from dataclasses import dataclass, field
 
@@ -79,7 +80,8 @@ class SegmentInfo:
 @dataclass
 class FlightInfo:
     """单个行程（航班方案）信息，价格取该行程 priceList 中最低的一档
-    （依次比较 成人价 → 儿童价 → 婴儿价，全部并列时取先出现的）"""
+    （先剔除含付费 servicePackage 的档位，再依次比较 成人价 → 儿童价 → 婴儿价，
+    全部并列时取先出现的）"""
     itinerary_id: str = ""             # 行程唯一标识（各航段航班号用 "-" 拼接，如 "CZ2317-CZ3437"）
     departure_time: str = ""           # 出发日期时间（第一段的 departureDateTime，"YYYY-MM-DD HH:MM:SS"）
     arrival_time: str = ""             # 到达日期时间（最后一段的 arrivalDateTime，中转跨天时为次日）
@@ -94,7 +96,7 @@ class FlightInfo:
     infant_price: float = 0            # 婴儿票价（元，部分选项无婴儿价，为 0）
     cabin: str = ""                    # 舱位等级（"Y" 经济 / "C" 公务 / "F" 头等）
     seat_class: str = ""               # 舱位代码（如 "K"、"V"、"X1"；中转时为拼接码如 "@Y-Y/T"）
-    baggage_tag: str = ""              # 托运行李标签（如 "托运行李额20KG"、"无免费托运行李额"）
+    baggage_kg: int = 0                # 免费托运行李重量（公斤）；从 baggageTag 解析，如 "托运行李额20KG"=20、"无免费托运行李额"=0、空=0
     free_airport_fee: bool = False     # 是否免机建费（priceTags 中 tag 含"免机建"）
     free_fuel_fee: bool = False        # 是否免燃油（响应体 freeOilFeeAndTax 字段）
     discount_rate: float = 0           # 折扣率（0.37 = 3.7 折；0 表示无标准折扣）
@@ -119,6 +121,25 @@ class SearchResult:
     raw_response: dict = field(default_factory=dict)  # batchSearch 原始响应体（未处理的完整 JSON）
 
 
+def _parse_baggage_kg(baggage_tag: str) -> int:
+    """
+    将托运行李标签解析为免费托运行李重量（公斤）。
+
+    规律：从 "数字KG/KG数" 提取数字；若无匹配（如 "无免费托运行李额"）、
+    空字符串则返回 0。兼容 "XXKG"、"X件"（按件计无重量信息时归为 0）等形式。
+    例：'托运行李额20KG' -> 20, '托运行李额10KG' -> 10,
+        '无免费托运行李额' -> 0, '' -> 0
+    """
+    if not baggage_tag:
+        return 0
+    # 匹配 "NNKG"/"NN公斤"（KG 不区分大小写），兼容全角/中文"公斤"
+    m = re.search(r"(\d+(?:\.\d+)?)\s*(?:[Kk][Gg]|公\s*斤)", baggage_tag)
+    if m:
+        # 可能是小数（如 "7.5KG"），取整
+        return int(float(m.group(1)))
+    return 0
+
+
 def _parse_itinerary(itinerary: dict) -> FlightInfo:
     """将一个行程（flightItineraryList 元素）解析为 FlightInfo"""
     info = FlightInfo()
@@ -141,7 +162,12 @@ def _parse_itinerary(itinerary: dict) -> FlightInfo:
 
     # ---- 价格：取最低档（依次比较 成人价 → 儿童价 → 婴儿价，全部并列时取先出现的） ----
     # 注意：infantPrice 缺失按 +∞ 处理（排在有值之后），确保并列时优先选有婴儿价信息的档位
-    price_list = itinerary.get("priceList", [])
+    # 注意：先剔除带付费服务包的档位（含 "servicePackage" 且其 price > 0），
+    #       例如选座/餐食/行李升级包等增值产品，其 adultPrice 不代表裸票价
+    price_list = [
+        p for p in itinerary.get("priceList", [])
+        if not (p.get("servicePackage") and p["servicePackage"].get("price", 0) > 0)
+    ]
     if price_list:
         best = min(
             price_list,
@@ -166,7 +192,7 @@ def _parse_itinerary(itinerary: dict) -> FlightInfo:
             info.seat_class = seat_list[0].get("seatClass", "")
             info.discount_rate = seat_list[0].get("discountRate", 0) or 0
 
-        info.baggage_tag = best.get("baggage", {}).get("baggageTag", "")
+        info.baggage_kg = _parse_baggage_kg(best.get("baggage", {}).get("baggageTag", ""))
         # info.penalty_tag = best.get("penalty", {}).get("defaultPenaltyTag", "")
         info.ticket_count = best.get("ticketCount", 0) or 0
 
@@ -280,16 +306,34 @@ class FlightCrawler:
 
             # 等待 batchSearch 响应到达（事件等待，响应一到立即继续）
             logger.info("Navigating to: %s", url)
-            with self.page.expect_response(
-                lambda r: "batchsearch" in r.url.lower(), timeout=timeout_ms
-            ) as resp_info:
-                self.page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-            response = resp_info.value
-            logger.info("batchSearch responded (HTTP %s)", response.status)
+            captured = {}
 
-            # 解析响应体
-            body = response.json()
+            def _on_response(resp):
+                if "batchsearch" in resp.url.lower() and "json" not in captured:
+                    try:
+                        captured["json"] = resp.json()
+                    except Exception as e:
+                        captured["err"] = str(e)
+
+            self.page.on("response", _on_response)
+            try:
+                self.page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+                # batchSearch 由页面 JS 加载后发起，轮询等待其在回调中被读取
+                deadline = time.time() + timeout_ms / 1000
+                while "json" not in captured and "err" not in captured:
+                    if time.time() > deadline:
+                        break
+                    self.page.wait_for_timeout(200)
+            finally:
+                self.page.remove_listener("response", _on_response)
+
+            body = captured.get("json")
             result.raw_response = body
+            if body is None:
+                err = captured.get("err", "batchSearch response not captured (timeout)")
+                result.error = f"batchSearch response not captured: {err}"
+                logger.error(result.error)
+                return result
 
             # 响应成功判断
             if body.get("status") != 0 or body.get("msg") != "success":
@@ -365,6 +409,9 @@ def main():
 
     queries = [
         {"dep": "CKG", "arr": "YTY", "date": "2026-09-01"},  # 重庆→扬州
+        {"dep": "CKG", "arr": "YTY", "date": "2026-09-02"},
+        {"dep": "CKG", "arr": "YTY", "date": "2026-09-03"},
+        {"dep": "SHA", "arr": "PEK", "date": "2026-09-01"},  # 上海→北京
     ]
 
     with FlightCrawler(headless=True) as crawler:
@@ -383,7 +430,7 @@ def main():
                     shared = f" (共享:{first_seg.operate_flight_no})" if first_seg.is_shared else ""
                     print(
                         f"   - {first_seg.flight_no}{shared}: 成人¥{f.adult_price} 儿童¥{f.child_price} "
-                        f"{f.cabin}/{f.seat_class} {f.baggage_tag} "
+                        f"{f.cabin}/{f.seat_class} 行李{f.baggage_kg}KG "
                         f"[免机建:{f.free_airport_fee} 免燃油:{f.free_fuel_fee}] "
                         f"({first_seg.departure_time} -> {f.segments[-1].arrival_time})"
                     )

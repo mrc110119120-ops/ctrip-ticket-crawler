@@ -64,6 +64,8 @@
 - 结果是直飞行程为主，`transfer_count` 为 `0`
 - 存在大量共享航班，`flightNo` 和 `operateFlightNo` 不一致很常见
 - 成人票价分布跨度较大，样本里能看到 `320` 到 `670` 之间的多个档位
+- 部分档位带付费 `servicePackage`（如 `{"id": "180", "price": 48}`），解析时已剔除
+  （`price > 0` 的服务包档位不参与最低价比较），确保取到的是裸票价
 - `free_airport_fee`、`free_fuel_fee`、`discount_rate`、`ticket_count` 等字段都能稳定取到
 - 航站楼、航班号、出发到达时间、机型、行李额、退改签规则都在响应里具备
 
@@ -97,7 +99,11 @@
 - 启动 Chromium 有固定开销
 - 每次查询仍然偏慢，不适合高并发
 - 对页面和响应结构变化仍然敏感
-- 批量查询目前是顺序执行，不是真正并行
+- 批量查询为顺序执行，不是真正并行
+- 响应体通过 `page.on("response")` 回调在回调内立即读取（`resp.json()`），避免了
+  `Response.json: ... evicted from inspector cache` 问题（页面导航会清掉前一个
+  batchSearch 的响应缓存，若在块外/延迟读取会触发该错误）。连续 4 个批量查询
+  实测全部成功，无缓存淘汰报错
 
 ## 8. 后续方向
 

@@ -52,7 +52,7 @@ $env:PYTHONIOENCODING = "utf-8"
 
 - 首次查询需要先访问首页建立会话 cookies，关键是 `_bfa` 和 `FVP`
 - 默认只保留直飞航班；如果要保留中转航班，需要在调用时显式开启
-- 当前仓库里的 `batch_search()` 与 `search()` 签名存在参数不一致，使用批量接口前建议先核对实现
+- 批量查询已实测稳定：连续 4 个查询（含跨航线）全部成功，无 `evicted from inspector cache` 报错
 - Windows 控制台请保持 UTF-8 输出，否则容易出现编码错误
 
 ## 相关文档

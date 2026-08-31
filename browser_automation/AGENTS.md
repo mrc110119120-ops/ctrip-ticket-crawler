@@ -21,6 +21,12 @@
 
 - `SegmentInfo`：单个航段的信息封装
 - `FlightInfo`：单个行程的信息封装，包含价格、舱位、行李、折扣等字段
+
+### 价格选取规则（`_parse_itinerary`）
+
+1. 先剔除带付费服务包的档位：`priceList` 中含 `servicePackage` 且其 `price > 0` 的档位不参与比较（此类为选座/餐食/行李升级包等增值产品，其 `adultPrice` 不是裸票价）
+2. 在剩余档位中依次比较：成人价最低 → 儿童价最低 → 婴儿价最低（婴儿价缺失按 +∞ 处理）
+3. 全部并列时取先出现的档位
 - `SearchResult`：一次查询的返回对象
 - `FlightCrawler.start()` / `stop()`：启动和关闭浏览器
 - `FlightCrawler._ensure_session(timeout_ms=30000)`：访问首页并等待会话 cookies
