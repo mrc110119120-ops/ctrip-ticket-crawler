@@ -26,7 +26,7 @@ SESSION_KEY_COOKIES = {"_bfa", "FVP"}
 @dataclass
 class SegmentInfo:
     """单个航段信息（中转航班有多个航段）"""
-    flight_no: str = ""                # 市场航班号
+    flight_no: str = ""                # 市场航班号（如 "EU7347"）
     is_shared: bool = False            # 是否共享航班（存在执飞航班号且异于市场航班号即为 True）
     operate_flight_no: str = ""        # 执飞航班号（共享航班时与 flight_no 不同）
     operate_airline_name: str = ""  # 执飞航司名称（如 "四川航空"）
@@ -90,18 +90,20 @@ class FlightInfo:
     duration_total: int = 0            # 总飞行时长（分钟，行程级，含中转等待）
     segments: list = field(default_factory=list)           # SegmentInfo 列表（所有航班信息都在各航段中）
 
-    # ---- 最低价格那一档的价格信息（依次比较 成人价 → 儿童价 → 婴儿价） ----
-    adult_price: float = 0             # 成人票价（元）
-    child_price: float = 0             # 儿童票价（元）
-    infant_price: float = 0            # 婴儿票价（元，部分选项无婴儿价，为 0）
+    # ---- 价格与产品信息（均为行程级，来自 priceList 最低档；
+    #      实测中转行程两个航段的值完全相同，seatClass 为拼接码 "@Y-Y/T"，
+    #      证明这些字段是 flight/行程级别而非 segment 级别） ----
+    adult_price: float = 0             # 成人票价（元，整个行程的总价）
+    child_price: float = 0             # 儿童票价（元，整个行程的总价）
+    infant_price: float = 0            # 婴儿票价（元；priceList 中为 0 时按 child_price 计）
     cabin: str = ""                    # 舱位等级（"Y" 经济 / "C" 公务 / "F" 头等）
-    seat_class: str = ""               # 舱位代码（如 "K"、"V"、"X1"；中转时为拼接码如 "@Y-Y/T"）
+    seat_class: str = ""               # 舱位代码（如 "K"、"V"；中转时为拼接码如 "@Y-Y/T"）
     baggage_kg: int = 0                # 免费托运行李重量（公斤）；从 baggageTag 解析，如 "托运行李额20KG"=20、"无免费托运行李额"=0、空=0
-    free_airport_fee: bool = False     # 是否免机建费（priceTags 中 tag 含"免机建"）
+    free_airport_fee: bool = False     # 是否免机建费（priceTags 中 FreeSurcharge 且 tag 含"免机建"）
     free_fuel_fee: bool = False        # 是否免燃油（响应体 freeOilFeeAndTax 字段）
     discount_rate: float = 0           # 折扣率（0.37 = 3.7 折；0 表示无标准折扣）
     ticket_count: int = 0              # 剩余票数（0 表示响应中未提供）
-    # penalty_tag: str = ""              # 退改签简述标签（如 "退改¥216起"）
+    # penalty_tag: str = ""              # 退改签简述标签（如 "退改¥216起"，取第一个 priceUnit 的 penaltyList）
 
     def to_dict(self) -> dict:
         d = self.__dict__.copy()
@@ -177,13 +179,15 @@ def _parse_itinerary(itinerary: dict) -> FlightInfo:
                 p.get("infantPrice", float("inf")),
             ),
         )
+
+        # 价格与产品信息均为行程级（priceList 最低档），不绑定到具体航段
         info.adult_price = best.get("adultPrice", 0)
         info.child_price = best.get("childPrice", 0)
         info.infant_price = best.get("infantPrice", 0)
         info.cabin = best.get("cabin", "")
         info.free_fuel_fee = bool(best.get("freeOilFeeAndTax", False))
 
-        # 舱位代码 / 折扣率：取第一个 priceUnit 的第一个座位
+        # 舱位代码 / 折扣率 / 退改签标签：取第一个 priceUnit 的第一个座位
         seat_list = (
             best.get("priceUnitList", [{}])[0]
             .get("flightSeatList", [{}])
@@ -191,9 +195,13 @@ def _parse_itinerary(itinerary: dict) -> FlightInfo:
         if seat_list:
             info.seat_class = seat_list[0].get("seatClass", "")
             info.discount_rate = seat_list[0].get("discountRate", 0) or 0
+        # 退改签简述：flightSeatList[0].penalty.defaultPenaltyTag（如 "退改¥335起"）
+        # if seat_list:
+        #     info.penalty_tag = (
+        #         seat_list[0].get("penalty", {}).get("defaultPenaltyTag", "") or ""
+        #     )
 
         info.baggage_kg = _parse_baggage_kg(best.get("baggage", {}).get("baggageTag", ""))
-        # info.penalty_tag = best.get("penalty", {}).get("defaultPenaltyTag", "")
         info.ticket_count = best.get("ticketCount", 0) or 0
 
         # 免机建费：priceTags 中 FreeSurcharge 类型且 tag 含 "免机建"
@@ -277,6 +285,7 @@ class FlightCrawler:
         arr: str,
         date: str,
         include_transfer: bool = False,
+        include_shared: bool = False,
         timeout_ms: int = 30000,
     ) -> SearchResult:
         """
@@ -287,6 +296,7 @@ class FlightCrawler:
             arr: 到达城市 IATA 代码（如 "YTY"）
             date: 出发日期（格式：YYYY-MM-DD）
             include_transfer: 是否保留中转航班（False=只保留直飞）
+            include_shared: 是否保留共享航班（False=剔除含共享航段的行程）
             timeout_ms: 超时时间（毫秒）
 
         Returns:
@@ -348,6 +358,10 @@ class FlightCrawler:
             if not include_transfer:
                 flights = [f for f in flights if f.transfer_count == 0]
 
+            # 共享航班筛选：默认剔除任一航段为共享的行程
+            if not include_shared:
+                flights = [f for f in flights if not any(s.is_shared for s in f.segments)]
+
             result.flights = flights
             result.success = len(flights) > 0
             if not result.success:
@@ -365,6 +379,7 @@ class FlightCrawler:
         self,
         queries: list[dict],
         include_transfer: bool = False,
+        include_shared: bool = False,
         delay_range: tuple = (2, 5),
     ) -> list:
         """
@@ -373,6 +388,7 @@ class FlightCrawler:
         Args:
             queries: 查询列表，每个元素为 dict: {dep, arr, date}
             include_transfer: 是否保留中转航班
+            include_shared: 是否保留共享航班（False=剔除含共享航段的行程）
             delay_range: 查询间随机延迟范围（秒）
 
         Returns:
@@ -389,6 +405,7 @@ class FlightCrawler:
                 arr=q["arr"],
                 date=q["date"],
                 include_transfer=include_transfer,
+                include_shared=include_shared,
             )
             results.append(result)
 
