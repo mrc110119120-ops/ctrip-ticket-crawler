@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS flights (
     itinerary_id   TEXT NOT NULL,              -- 行程唯一标识（各段航班号 "-" 拼接）
     departure_time TEXT NOT NULL,              -- 出发日期时间（第一段）
     arrival_time   TEXT NOT NULL,              -- 到达日期时间（最后一段）
+    departure_hour INTEGER NOT NULL DEFAULT -1, -- 出发小时（0-23，便于按时段筛选/分析；-1=未知）
     transfer_count INTEGER NOT NULL DEFAULT 0, -- 中转次数（0=直飞）
     cross_days     INTEGER NOT NULL DEFAULT 0, -- 跨天数
     duration_total INTEGER NOT NULL DEFAULT 0, -- 总时长（分钟）
@@ -47,6 +48,23 @@ CREATE INDEX IF NOT EXISTS idx_flights_route_date
     ON flights(dep, arr, flight_date, crawled_at);
 CREATE INDEX IF NOT EXISTS idx_flights_itinerary
     ON flights(itinerary_id, flight_date, crawled_at);
+CREATE INDEX IF NOT EXISTS idx_flights_latest
+    ON flights(dep, arr, flight_date, run_id, adult_price);
+
+-- 最新一轮数据视图：每条 (dep, arr, flight_date, itinerary_id) 只保留
+-- run_id 最大（最近一次抓到该航班）的一行，免去每次手写子查询
+CREATE VIEW IF NOT EXISTS v_latest_flights AS
+SELECT f.*
+FROM flights f
+JOIN (
+    SELECT dep, arr, flight_date, itinerary_id, MAX(run_id) AS max_run_id
+    FROM flights
+    GROUP BY dep, arr, flight_date, itinerary_id
+) latest
+  ON f.dep = latest.dep AND f.arr = latest.arr
+ AND f.flight_date = latest.flight_date
+ AND f.itinerary_id = latest.itinerary_id
+ AND f.run_id = latest.max_run_id;
 
 CREATE TABLE IF NOT EXISTS segments (
     id                     INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -78,14 +96,39 @@ CREATE INDEX IF NOT EXISTS idx_segments_flight ON segments(flight_id);
 
 
 def connect(db_path: str) -> sqlite3.Connection:
-    """连接数据库并确保 schema 存在"""
+    """连接数据库并确保 schema 存在（含旧库迁移）"""
     conn = sqlite3.connect(db_path)
     conn.executescript(SCHEMA)
+    _migrate(conn)
     return conn
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """旧库迁移：为 flights 补充 departure_hour 列并从 departure_time 回填"""
+    cols = [row[1] for row in conn.execute("PRAGMA table_info(flights)")]
+    if "departure_hour" not in cols:
+        conn.execute(
+            "ALTER TABLE flights ADD COLUMN departure_hour INTEGER NOT NULL DEFAULT -1"
+        )
+    # 回填缺失的小时值（departure_time 格式 "YYYY-MM-DD HH:MM:SS"）
+    conn.execute(
+        """UPDATE flights
+           SET departure_hour = CAST(substr(departure_time, 12, 2) AS INTEGER)
+           WHERE departure_hour = -1 AND length(departure_time) >= 13"""
+    )
+    conn.commit()
 
 
 def _utcnow() -> str:
     return datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _parse_hour(departure_time: str) -> int:
+    """从 "YYYY-MM-DD HH:MM:SS" 中解析出小时（0-23），解析失败返回 -1"""
+    try:
+        return int(departure_time[11:13])
+    except (ValueError, IndexError, TypeError):
+        return -1
 
 
 
@@ -119,14 +162,16 @@ def save_search_result(conn: sqlite3.Connection, run_id: int, result) -> int:
         cur = conn.execute(
             """INSERT INTO flights (
                    run_id, crawled_at, dep, arr, flight_date, itinerary_id,
-                   departure_time, arrival_time, transfer_count, cross_days,
+                   departure_time, arrival_time, departure_hour,
+                   transfer_count, cross_days,
                    duration_total, adult_price, child_price, infant_price,
                    cabin, seat_class, baggage_kg, free_airport_fee,
                    free_fuel_fee, discount_rate, ticket_count
-               ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+               ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 run_id, crawled_at, result.dep, result.arr, result.date,
                 f.itinerary_id, f.departure_time, f.arrival_time,
+                _parse_hour(f.departure_time),
                 f.transfer_count, f.cross_days, f.duration_total,
                 f.adult_price, f.child_price, f.infant_price,
                 f.cabin, f.seat_class, f.baggage_kg,
