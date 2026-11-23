@@ -352,6 +352,11 @@ class FlightCrawler:
                 return result
 
             itineraries = body.get("data", {}).get("flightItineraryList", [])
+            if not itineraries and body.get("data", {}).get("needUserLogin"):
+                # 携程返回空数据并要求登录：通常是请求过频被风控，并非真的没有航班
+                result.error = "携程要求登录(needUserLogin)，疑似被风控限流，并非无航班；请稍后重试"
+                logger.error(result.error)
+                return result
             flights = [_parse_itinerary(it) for it in itineraries]
 
             # 中转筛选：默认只保留直飞
